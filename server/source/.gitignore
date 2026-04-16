@@ -1,0 +1,17 @@
+commons/target/
+chat-server/config/mycs.properties
+chat-server/log/
+chat-server/target/
+game-server/cache/
+game-server/config/mygs.properties
+game-server/log/
+game-server/target/
+login-server/config/myls.properties
+login-server/log/
+login-server/target/
+
+**/.idea/
+**/.settings/
+**/*.iml
+**/.classpath
+**/.project

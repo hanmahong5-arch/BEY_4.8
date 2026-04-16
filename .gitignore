@@ -1,0 +1,31 @@
+# Exclude heavy/runtime directories
+client/
+prod/
+dev/
+devchat-server/
+devgame-server/
+devlogin-server/
+aion48*/
+tools/
+
+# Build artifacts
+**/target/
+**/.git_bak/
+*.jar
+*.class
+
+# IDE
+**/.idea/
+**/.vs/
+**/.settings/
+*.iml
+*.suo
+*.vsidx
+
+# OS / misc
+Thumbs.db
+Desktop.ini
+.DS_Store
+.serena/
+**/log/
+*.log
