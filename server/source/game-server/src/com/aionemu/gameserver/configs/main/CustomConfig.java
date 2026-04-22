@@ -613,4 +613,48 @@ public class CustomConfig {
 	 */
 	@Property(key = "gameserver.custom.solo_fortress_bounty_ap", defaultValue = "10000")
 	public static int SOLO_FORTRESS_BOUNTY_AP;
+
+	// ============================
+	// PvP Season System — 赛季争锋
+	// Weekly/configurable PvP seasons with live leaderboard, per-kill AP bonus,
+	// and rank-based rewards distributed at season rollover.
+	// ============================
+
+	/** Master kill-switch for the PvP Season feature. */
+	@Property(key = "gameserver.custom.pvp_season_enabled", defaultValue = "true")
+	public static boolean PVP_SEASON_ENABLED;
+
+	/** Duration of one season in days. Default 7 (weekly). */
+	@Property(key = "gameserver.custom.pvp_season_duration_days", defaultValue = "7")
+	public static int PVP_SEASON_DURATION_DAYS;
+
+	/** Interval (ms) of the season sweep task (flush + boundary check). Default 1 hour. */
+	@Property(key = "gameserver.custom.pvp_season_flush_interval_ms", defaultValue = "3600000")
+	public static long PVP_SEASON_FLUSH_INTERVAL_MS;
+
+	/** Extra AP awarded per counted PvP kill during the season (on top of vanilla AP). */
+	@Property(key = "gameserver.custom.pvp_season_per_kill_ap", defaultValue = "100")
+	public static int PVP_SEASON_PER_KILL_AP;
+
+	/**
+	 * AP rewards mailed to top N players at season rollover (comma-separated).
+	 * Example: "100000,50000,25000,10000,5000" gives #1=100k, #2=50k, etc.
+	 * Parsed at first-use in PvpSeasonService.
+	 */
+	@Property(key = "gameserver.custom.pvp_season_top_rewards_ap", defaultValue = "100000,50000,25000,10000,5000")
+	public static String PVP_SEASON_TOP_REWARDS_AP_RAW;
+
+	/** Whether to broadcast the first kill of each season. */
+	@Property(key = "gameserver.custom.pvp_season_first_blood_broadcast", defaultValue = "true")
+	public static boolean PVP_SEASON_FIRST_BLOOD_BROADCAST;
+
+	// ============================
+	// Achievement System — 里程碑成就
+	// Catalog-driven milestones: first PvP kill, 100/1000 kills, solo fortress
+	// capture, concurrent 2/3/5 fortresses, FFA kill streaks, lord slayer.
+	// ============================
+
+	/** Master kill-switch for achievements. */
+	@Property(key = "gameserver.custom.achievement_enabled", defaultValue = "true")
+	public static boolean ACHIEVEMENT_ENABLED;
 }

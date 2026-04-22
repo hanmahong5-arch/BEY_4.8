@@ -15,6 +15,7 @@ import org.slf4j.LoggerFactory;
 import com.aionemu.gameserver.configs.main.CustomConfig;
 import com.aionemu.gameserver.metrics.CustomAuditLog;
 import com.aionemu.gameserver.metrics.CustomFeatureMetrics;
+import com.aionemu.gameserver.services.achievement.AchievementService;
 import com.aionemu.gameserver.model.ChatType;
 import com.aionemu.gameserver.model.drop.Drop;
 import com.aionemu.gameserver.model.drop.DropItem;
@@ -347,6 +348,9 @@ public final class FfaModeService {
 			CustomFeatureMetrics.getInstance().inc("ffa.kills");
 			AtomicInteger streak = killStreaks.computeIfAbsent(killer.getObjectId(), k -> new AtomicInteger());
 			int current = streak.incrementAndGet();
+			// Achievement: feed FFA streak value (absolute)
+			try { AchievementService.getInstance().onEvent(killer.getObjectId(), AchievementService.Trigger.FFA_STREAK, current); }
+			catch (Throwable t) { log.error("[FFA] achievement trigger failed", t); }
 			int threshold = CustomConfig.FFA_KILL_STREAK_BROADCAST_THRESHOLD;
 			if (threshold > 0 && current > 0 && current % threshold == 0) {
 				String msg = "『" + killer.getName() + "』FFA 连杀 " + current + " 人!";

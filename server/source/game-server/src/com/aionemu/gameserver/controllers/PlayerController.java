@@ -332,6 +332,15 @@ public class PlayerController extends CreatureController<Player> {
 			}
 		}
 
+		// PvP Season: tally kill/death + award season AP bonus.
+		if (com.aionemu.gameserver.configs.main.CustomConfig.PVP_SEASON_ENABLED) {
+			try {
+				com.aionemu.gameserver.services.pvpseason.PvpSeasonService.getInstance().onPvpKill(player, lastAttacker);
+			} catch (Throwable t) {
+				log.error("[PvpSeason] onPvpKill hook threw for " + player.getName(), t);
+			}
+		}
+
 		// Effects removed with super.onDie()
 		super.onDie(lastAttacker);
 

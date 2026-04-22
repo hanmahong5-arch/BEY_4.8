@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(taskkill //PID 14972 //F)",
+      "Bash(rm -f \"D:/拾光ai/BEY_4.8/.git/index.lock\")"
+    ]
+  }
+}

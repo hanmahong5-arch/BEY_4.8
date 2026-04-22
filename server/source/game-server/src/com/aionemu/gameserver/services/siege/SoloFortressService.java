@@ -18,6 +18,7 @@ import com.aionemu.gameserver.configs.main.CustomConfig;
 import com.aionemu.gameserver.dao.SiegeDAO;
 import com.aionemu.gameserver.metrics.CustomAuditLog;
 import com.aionemu.gameserver.metrics.CustomFeatureMetrics;
+import com.aionemu.gameserver.services.achievement.AchievementService;
 import com.aionemu.gameserver.model.ChatType;
 import com.aionemu.gameserver.model.gameobjects.Creature;
 import com.aionemu.gameserver.model.gameobjects.LetterType;
@@ -151,6 +152,11 @@ public final class SoloFortressService {
 		CustomFeatureMetrics.getInstance().inc(M_CAPTURE);
 		CustomAuditLog.getInstance().log("fortress", "capture", safeName,
 			"fortress=" + loc.getLocationId() + " owned=" + ownedCount);
+		// Achievement triggers
+		try {
+			AchievementService.getInstance().onEvent(playerObjId, AchievementService.Trigger.FORTRESS_CAPTURE, 1);
+			AchievementService.getInstance().onEvent(playerObjId, AchievementService.Trigger.FORTRESS_CONCURRENT, ownedCount);
+		} catch (Throwable t) { log.error("[SoloFortress] achievement trigger failed", t); }
 		log.info("[SoloFortress] {} ({}) crowned as lord of fortress {} (id={}), rank={}", safeName, playerObjId, fortressName, loc.getLocationId(), BroadcastUtil.lordRank(ownedCount));
 	}
 
@@ -272,6 +278,9 @@ public final class SoloFortressService {
 		});
 		CustomAuditLog.getInstance().log("fortress", "bounty", safeKiller,
 			"victim=" + safeVictim + " ap=" + bounty + " fortresses=" + ownedCount);
+		// Achievement trigger: each lord kill feeds cumulative counter
+		try { AchievementService.getInstance().onEvent(killer.getObjectId(), AchievementService.Trigger.LORD_KILL, 1); }
+		catch (Throwable t) { log.error("[SoloFortress] achievement trigger failed", t); }
 		log.info("[SoloFortress] bounty {} AP: {} killed lord {} (owned {})", bounty, safeKiller, safeVictim, ownedCount);
 	}
 

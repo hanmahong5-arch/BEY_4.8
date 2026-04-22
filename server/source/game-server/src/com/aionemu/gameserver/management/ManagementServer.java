@@ -15,10 +15,17 @@ import com.sun.net.httpserver.HttpServer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.List;
+import java.util.Map;
+
+import com.aionemu.gameserver.metrics.CustomAuditLog;
+import com.aionemu.gameserver.metrics.CustomFeatureMetrics;
 import com.aionemu.gameserver.model.ChatType;
 import com.aionemu.gameserver.model.gameobjects.player.Player;
-import com.aionemu.gameserver.services.HTMLService;
 import com.aionemu.gameserver.services.AIAgentService;
+import com.aionemu.gameserver.services.HTMLService;
+import com.aionemu.gameserver.services.siege.SoloFortressService;
+import com.aionemu.gameserver.services.pvpseason.PvpSeasonService;
 import com.aionemu.gameserver.utils.PacketSendUtility;
 import com.aionemu.gameserver.world.World;
 
@@ -61,6 +68,12 @@ public class ManagementServer {
             server.createContext("/api/reload/", this::handleReload);
             server.createContext("/api/ai/push", this::handleAIPush);
             server.createContext("/api/ai/players", this::handleAIPlayers);
+            // Custom feature observability endpoints
+            server.createContext("/api/metrics", this::handleMetrics);
+            server.createContext("/api/audit/tail", this::handleAuditTail);
+            server.createContext("/api/fortress/leaderboard", this::handleFortressLeaderboard);
+            server.createContext("/api/season/leaderboard", this::handleSeasonLeaderboard);
+            server.createContext("/api/dashboard", this::handleDashboard);
 
             server.start();
             log.info("[ManagementAPI] Listening on http://127.0.0.1:{}/api/", port);
@@ -254,5 +267,215 @@ public class ManagementServer {
         try (OutputStream os = ex.getResponseBody()) {
             os.write(bytes);
         }
+    }
+
+    private void respondHtml(HttpExchange ex, int code, String body) throws IOException {
+        byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
+        ex.getResponseHeaders().set("Content-Type", "text/html; charset=utf-8");
+        ex.getResponseHeaders().set("Access-Control-Allow-Origin", "*");
+        ex.sendResponseHeaders(code, bytes.length);
+        try (OutputStream os = ex.getResponseBody()) {
+            os.write(bytes);
+        }
+    }
+
+    // --- Custom feature handlers ---
+
+    /** GET /api/metrics — snapshot of CustomFeatureMetrics counters + timings. */
+    private void handleMetrics(HttpExchange ex) throws IOException {
+        Map<String, Long> counters = CustomFeatureMetrics.getInstance().snapshot();
+        Map<String, String> timings = CustomFeatureMetrics.getInstance().timingSnapshot();
+        StringBuilder sb = new StringBuilder("{\n  \"counters\": {");
+        int i = 0;
+        for (var e : counters.entrySet()) {
+            if (i > 0) sb.append(",");
+            sb.append("\n    \"").append(escapeJson(e.getKey())).append("\": ").append(e.getValue());
+            i++;
+        }
+        sb.append("\n  },\n  \"timings\": {");
+        i = 0;
+        for (var e : timings.entrySet()) {
+            if (i > 0) sb.append(",");
+            sb.append("\n    \"").append(escapeJson(e.getKey())).append("\": \"")
+                .append(escapeJson(e.getValue())).append("\"");
+            i++;
+        }
+        sb.append("\n  }\n}");
+        respond(ex, 200, sb.toString());
+    }
+
+    /** GET /api/audit/tail?feature=fortress&n=20 — audit log tail. */
+    private void handleAuditTail(HttpExchange ex) throws IOException {
+        String query = ex.getRequestURI().getQuery();
+        String feature = null;
+        int n = 20;
+        if (query != null) {
+            for (String part : query.split("&")) {
+                String[] kv = part.split("=", 2);
+                if (kv.length == 2) {
+                    if ("feature".equals(kv[0])) feature = kv[1];
+                    else if ("n".equals(kv[0])) {
+                        try { n = Integer.parseInt(kv[1]); } catch (NumberFormatException ignored) {}
+                    }
+                }
+            }
+        }
+        n = Math.min(Math.max(1, n), 200);
+        List<String> lines = CustomAuditLog.getInstance().tail(n, feature);
+        StringBuilder sb = new StringBuilder("{\n  \"feature\": ");
+        sb.append(feature == null ? "null" : "\"" + feature + "\"");
+        sb.append(",\n  \"count\": ").append(lines.size()).append(",\n  \"entries\": [");
+        for (int i = 0; i < lines.size(); i++) {
+            if (i > 0) sb.append(",");
+            sb.append("\n    ").append(lines.get(i));
+        }
+        sb.append("\n  ]\n}");
+        respond(ex, 200, sb.toString());
+    }
+
+    /** GET /api/fortress/leaderboard — lord leaderboard sorted by fortress count. */
+    private void handleFortressLeaderboard(HttpExchange ex) throws IOException {
+        List<Object[]> lb = SoloFortressService.getInstance().getLeaderboard();
+        StringBuilder sb = new StringBuilder("{\n  \"count\": ").append(lb.size());
+        sb.append(",\n  \"ranking\": [");
+        for (int i = 0; i < lb.size(); i++) {
+            Object[] entry = lb.get(i);
+            if (i > 0) sb.append(",");
+            sb.append("\n    {\"rank\":").append(i + 1)
+                .append(",\"name\":\"").append(escapeJson((String) entry[0])).append("\"")
+                .append(",\"fortresses\":").append(entry[1])
+                .append(",\"names\":\"").append(escapeJson((String) entry[2])).append("\"}");
+        }
+        sb.append("\n  ]\n}");
+        respond(ex, 200, sb.toString());
+    }
+
+    /** GET /api/season/leaderboard?n=20 — PvP Season leaderboard. */
+    private void handleSeasonLeaderboard(HttpExchange ex) throws IOException {
+        int n = 20;
+        String query = ex.getRequestURI().getQuery();
+        if (query != null) {
+            for (String part : query.split("&")) {
+                String[] kv = part.split("=", 2);
+                if (kv.length == 2 && "n".equals(kv[0])) {
+                    try { n = Integer.parseInt(kv[1]); } catch (NumberFormatException ignored) {}
+                }
+            }
+        }
+        n = Math.min(Math.max(1, n), 100);
+        List<Object[]> lb = PvpSeasonService.getInstance().buildLeaderboard(n);
+        Map<String, Object> snap = PvpSeasonService.getInstance().snapshot();
+        StringBuilder sb = new StringBuilder("{\n  \"season\": {");
+        int i = 0;
+        for (var e : snap.entrySet()) {
+            if (i > 0) sb.append(",");
+            Object v = e.getValue();
+            sb.append("\n    \"").append(escapeJson(e.getKey())).append("\": ");
+            if (v instanceof Number) sb.append(v);
+            else sb.append("\"").append(escapeJson(String.valueOf(v))).append("\"");
+            i++;
+        }
+        sb.append("\n  },\n  \"ranking\": [");
+        for (int k = 0; k < lb.size(); k++) {
+            Object[] entry = lb.get(k);
+            if (k > 0) sb.append(",");
+            sb.append("\n    {\"rank\":").append(k + 1)
+                .append(",\"player_id\":").append(entry[0])
+                .append(",\"name\":\"").append(escapeJson(String.valueOf(entry[1]))).append("\"")
+                .append(",\"kills\":").append(entry[2])
+                .append(",\"deaths\":").append(entry[3])
+                .append(",\"ap_earned\":").append(entry[4])
+                .append("}");
+        }
+        sb.append("\n  ]\n}");
+        respond(ex, 200, sb.toString());
+    }
+
+    /** GET /api/dashboard — HTML dashboard with live metrics + leaderboards. */
+    private void handleDashboard(HttpExchange ex) throws IOException {
+        StringBuilder h = new StringBuilder();
+        h.append("<!DOCTYPE html><html><head><meta charset=\"utf-8\">");
+        h.append("<title>BEY_4.8 Dashboard</title>");
+        h.append("<style>");
+        h.append("body{font-family:'Consolas',monospace;background:#0d1117;color:#c9d1d9;padding:20px;}");
+        h.append("h1{color:#f0883e;border-bottom:2px solid #30363d;}");
+        h.append("h2{color:#58a6ff;margin-top:30px;}");
+        h.append("table{border-collapse:collapse;margin:10px 0;}");
+        h.append("th,td{padding:6px 12px;border:1px solid #30363d;text-align:left;}");
+        h.append("th{background:#161b22;color:#f0883e;}");
+        h.append("tr:nth-child(even){background:#161b22;}");
+        h.append(".rank-1{color:#ffd700;font-weight:bold;}");
+        h.append(".rank-2{color:#c0c0c0;font-weight:bold;}");
+        h.append(".rank-3{color:#cd7f32;font-weight:bold;}");
+        h.append(".k{color:#58a6ff;}.v{color:#7ee787;}");
+        h.append("</style></head><body>");
+        h.append("<h1>BEY_4.8 自定义特性仪表盘</h1>");
+        h.append("<p>Live as of ").append(Instant.now()).append(" — Uptime: ").append(formatUptime()).append("</p>");
+
+        // Fortress leaderboard
+        h.append("<h2>要塞领主排行榜</h2>");
+        h.append("<table><tr><th>#</th><th>领主</th><th>要塞数</th><th>名录</th></tr>");
+        List<Object[]> fLb = SoloFortressService.getInstance().getLeaderboard();
+        int rank = 1;
+        for (Object[] entry : fLb) {
+            String cls = rank <= 3 ? " class=\"rank-" + rank + "\"" : "";
+            h.append("<tr").append(cls).append("><td>").append(rank++).append("</td>")
+                .append("<td>").append(htmlEscape((String) entry[0])).append("</td>")
+                .append("<td>").append(entry[1]).append("</td>")
+                .append("<td>").append(htmlEscape((String) entry[2])).append("</td></tr>");
+            if (rank > 10) break;
+        }
+        if (fLb.isEmpty()) h.append("<tr><td colspan=4>(无)</td></tr>");
+        h.append("</table>");
+
+        // PvP Season leaderboard
+        h.append("<h2>PvP 赛季排行榜</h2>");
+        Map<String, Object> seasonSnap = PvpSeasonService.getInstance().snapshot();
+        h.append("<p>");
+        for (var e : seasonSnap.entrySet()) {
+            h.append("<span class=\"k\">").append(e.getKey()).append("</span>=")
+                .append("<span class=\"v\">").append(e.getValue()).append("</span> &nbsp; ");
+        }
+        h.append("</p>");
+        h.append("<table><tr><th>#</th><th>玩家</th><th>击杀</th><th>死亡</th><th>AP</th></tr>");
+        List<Object[]> sLb = PvpSeasonService.getInstance().buildLeaderboard(20);
+        rank = 1;
+        for (Object[] entry : sLb) {
+            String cls = rank <= 3 ? " class=\"rank-" + rank + "\"" : "";
+            h.append("<tr").append(cls).append("><td>").append(rank++).append("</td>")
+                .append("<td>").append(htmlEscape((String) entry[1])).append("</td>")
+                .append("<td>").append(entry[2]).append("</td>")
+                .append("<td>").append(entry[3]).append("</td>")
+                .append("<td>").append(entry[4]).append("</td></tr>");
+        }
+        if (sLb.isEmpty()) h.append("<tr><td colspan=5>(无)</td></tr>");
+        h.append("</table>");
+
+        // Metrics
+        h.append("<h2>特性指标</h2><table><tr><th>Key</th><th>Value</th></tr>");
+        Map<String, Long> counters = CustomFeatureMetrics.getInstance().snapshot();
+        for (var e : counters.entrySet()) {
+            h.append("<tr><td class=\"k\">").append(e.getKey()).append("</td><td class=\"v\">")
+                .append(e.getValue()).append("</td></tr>");
+        }
+        h.append("</table>");
+
+        h.append("<p style=\"margin-top:40px;color:#666;\">JSON endpoints: ")
+            .append("<a href=\"/api/metrics\" style=\"color:#58a6ff\">/api/metrics</a> | ")
+            .append("<a href=\"/api/fortress/leaderboard\" style=\"color:#58a6ff\">/api/fortress/leaderboard</a> | ")
+            .append("<a href=\"/api/season/leaderboard\" style=\"color:#58a6ff\">/api/season/leaderboard</a> | ")
+            .append("<a href=\"/api/audit/tail?n=20\" style=\"color:#58a6ff\">/api/audit/tail?n=20</a></p>");
+        h.append("</body></html>");
+        respondHtml(ex, 200, h.toString());
+    }
+
+    private static String escapeJson(String s) {
+        if (s == null) return "";
+        return s.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n");
+    }
+
+    private static String htmlEscape(String s) {
+        if (s == null) return "";
+        return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
     }
 }

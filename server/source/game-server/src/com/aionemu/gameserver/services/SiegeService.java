@@ -173,6 +173,12 @@ public class SiegeService {
 
 		// Boot single-player fortress support service (tax + decay sweep).
 		SoloFortressService.getInstance().init();
+
+		// Boot PvP Season service (periodic flush + boundary rollover).
+		com.aionemu.gameserver.services.pvpseason.PvpSeasonService.getInstance().init();
+
+		// Boot Achievement service (catalog + persistence).
+		com.aionemu.gameserver.services.achievement.AchievementService.getInstance().init();
 	}
 
 	public void checkSiegeStart(final int locationId) {
