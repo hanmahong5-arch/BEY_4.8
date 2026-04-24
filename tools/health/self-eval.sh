@@ -18,7 +18,7 @@ echo "=== BEY_4.8 Self-Eval ($ENV) @ $(date -Iseconds) ==="
 
 # 1. 端口（内部监听端口；公开 2107/7778 由 shiguang-gate 前端转发，不在此检查）
 echo "[1] Ports (internal)"
-if [ "$ENV" = "prod" ]; then PORTS="9021 12107 17778 9100"; else PORTS="9121 12207 17878 9101"; fi
+if [ "$ENV" = "prod" ]; then PORTS="9021 2107 7778 9100"; else PORTS="9121 2207 7878 9101"; fi
 for p in $PORTS; do
   if netstat -ano 2>/dev/null | grep -q ":$p .*LISTENING"; then OK "port $p listening"
   else BAD "port $p NOT listening"; fi

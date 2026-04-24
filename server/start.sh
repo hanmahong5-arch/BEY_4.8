@@ -24,16 +24,16 @@ LS_DIR="$ENV_DIR/login-server"
 GS_DIR="$ENV_DIR/game-server"
 CS_DIR="$ENV_DIR/chat-server"
 
-# Health-check ports = INTERNAL ports the JVM actually binds.
-# Public ports (LS 2107 / GS 7778) are fronted by shiguang-gate; internal = +10000 offset.
+# Health-check ports = the ports JVM actually binds (matches network.properties).
+# Local self-test mode: LS/GS bind public ports directly (no shiguang-gate front).
 if [[ "$TARGET" == "prod" ]]; then
     CS_PORT=9021
-    LS_PORT=12107
-    GS_PORT=17778
+    LS_PORT=2107
+    GS_PORT=7778
 else
     CS_PORT=9121
-    LS_PORT=12207
-    GS_PORT=17878
+    LS_PORT=2207
+    GS_PORT=7878
 fi
 
 check_port() {
